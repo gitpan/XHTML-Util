@@ -2,7 +2,7 @@ package XHTML::Util;
 use strict;
 use warnings;
 no warnings "uninitialized";
-our $VERSION = "0.02";
+our $VERSION = "0.03";
 use Encode;
 use Carp; # By verbosity?
 use Scalar::Util "blessed";
@@ -241,7 +241,6 @@ sub remove_style { # (* or [list])
     croak "not implemented";
 }
 
-
 sub inline_stylesheets { # (names/paths) / external sheets allowed.
     croak "not implemented";
     my $self = shift;
@@ -407,7 +406,7 @@ XHTML::Util - (alpha software) powerful utilities for common but difficult to na
 
 =head2 VERSION
 
-0.02
+0.03
 
 =head1 SYNOPSIS
 
@@ -484,7 +483,9 @@ Takes a content block and a CSS selector string. Completely removes the matched 
 
 =head2 remove_style
 
-[Not implemented.] Removes matched styles.
+[Not implemented.] Removes styles from matched nodes. To remove all style from a fragment-
+
+ $xu->remove_style($content, "*");
 
 =head2 inline_stylesheets
 
@@ -519,7 +520,7 @@ To add paragraph markup to naked text. There are many, many implementations of t
  not be touched!
  </pre>I meant to do that.
 
-With C<<XHTML::Util->enpara>> you will get-
+With C<< XHTML::Util->enpara >> you will get-
 
  <p>Is this a paragraph<br/>
  or two?</p>
@@ -558,7 +559,7 @@ Finish spec and tests. Get it running solid enough to remove alpha label. Genera
 
 All input should be utf8 or at least safe to run L<Encode::decode_utf8> on. Regular Latin character sets, I suspect, will be fine but extended sets will probably give garbage or unpredictable results; guessing.
 
-This module is currently targeted to working with body B<fragments>. You will get fragments back, not documents. I want to expand it to handle both and deal with doc, DTD, head and such but it's not it's primary use case so it won't come first.
+This module is currently targeted to working with body B<fragments>. You will get fragments back, not documents. I want to expand it to handle both and deal with doc, DTD, head and such but that's not its primary use case so it won't come first.
 
 I have used many of these methods and snippets in many projects and I'm tired of recycling them. Some are extremely useful and, at least in the case of L</enpara>, better than any other implementation I've been able to find in any language.
 
@@ -631,4 +632,6 @@ delete @Charmap{qw( amp lt gt quot apos )};
 # throw them.
 # translate div p
 # replace //a@href... || a[href^=...] 'content' || call back
+
+HTML TO XHTML will have to strip depracated shite like center and font.
 

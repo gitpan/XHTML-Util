@@ -25,4 +25,4 @@ requires:
   HTML::TokeParser::Simple: 0
   Scalar::Util: 0
   XML::LibXML: 1.6
-version: 0.02
+version: 0.03

@@ -3,7 +3,7 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.02
+    0.03
 
 SYNOPSIS
      use strict;
@@ -84,7 +84,10 @@ METHODS
     [Not implemented.] Translates one tag to another.
 
   remove_style
-    [Not implemented.] Removes matched styles.
+    [Not implemented.] Removes styles from matched nodes. To remove all
+    style from a fragment-
+
+     $xu->remove_style($content, "*");
 
   inline_stylesheets
     [Not implemented.] Moves all linked stylesheet information into inline
@@ -124,7 +127,7 @@ METHODS
      not be touched!
      </pre>I meant to do that.
 
-    With "<XHTML::Util-"enpara>> you will get-
+    With "XHTML::Util->enpara" you will get-
 
      <p>Is this a paragraph<br/>
      or two?</p>
@@ -168,8 +171,8 @@ BUGS AND LIMITATIONS
 
     This module is currently targeted to working with body fragments. You
     will get fragments back, not documents. I want to expand it to handle
-    both and deal with doc, DTD, head and such but it's not it's primary use
-    case so it won't come first.
+    both and deal with doc, DTD, head and such but that's not its primary
+    use case so it won't come first.
 
     I have used many of these methods and snippets in many projects and I'm
     tired of recycling them. Some are extremely useful and, at least in the
