@@ -2,7 +2,7 @@ package XHTML::Util;
 use strict;
 use warnings;
 no warnings "uninitialized";
-our $VERSION = "0.01";
+our $VERSION = "0.02";
 use Encode;
 use Carp; # By verbosity?
 use Scalar::Util "blessed";
@@ -14,7 +14,7 @@ use HTML::TokeParser::Simple;
 # LWP::Simple, external styles
 use CSS::Tiny;
 
-#my $isKnown = \%HTML::Tagset::isKnown;
+my $isKnown = \%HTML::Tagset::isKnown;
 my $emptyElement = \%HTML::Tagset::emptyElement;
 #my $canTighten = \%HTML::Tagset::canTighten;
 #my $isHeadElement = \%HTML::Tagset::isHeadElement;
@@ -26,6 +26,8 @@ my $isPhraseMarkup = \%HTML::Tagset::isPhraseMarkup;
 my $isFormElement = \%HTML::Tagset::isFormElement;
 #my $p_closure_barriers = \@HTML::Tagset::p_closure_barriers;
 
+# Accommodate HTML::TokeParser's idea of a "tag."
+for my $t ( keys %{$emptyElement} ) { $isKnown->{"$t/"} = 1 }
 my $isBlockLevel = { map {; $_ => 1 }
                      grep { ! ( $isPhraseMarkup->{$_} || $isFormElement->{$_} ) }
                      keys %{$isBodyElement}
@@ -37,7 +39,7 @@ sub new {
     $self;
 }
 
-sub strip_tags { # On tags only, leaves text nodes.
+sub strip_tags {
     my $self = shift;
     my $content = shift;
     my $xpath = HTML::Selector::XPath::selector_to_xpath(shift);
@@ -55,7 +57,6 @@ sub strip_tags { # On tags only, leaves text nodes.
         }
         $node->replaceNode($fragment);
     }
-
     my $out = "";
     $out .= $_->serialize(1) for $root->childNodes;
     _trim($out);
@@ -67,7 +68,18 @@ sub _trim {
 }
 
 sub remove { # Synonymous for remove_nodes, all gone.
-    croak "not implemented";
+    my $self = shift;
+    # my $content = shift;
+    my $content = $self->_sanitize_fragment(shift) or return;
+    my $xpath = HTML::Selector::XPath::selector_to_xpath(shift);
+    carp "No selector was given to strip_tags" and return $content unless $xpath;
+    my $root = blessed($content) =~ /\AXML::LibXML::/ ?
+        $content : $self->_fragment_to_body_node($content);
+
+    $_->parentNode->removeChild($_) for $root->findnodes($xpath);
+    my $out = "";
+    $out .= $_->serialize(1) for $root->childNodes;
+    _trim($out);
 }
 
 # No... ? requires object->call shuffling to work : sub enpara_tag { +shift->{enpara_tag} = shift || "p"; }
@@ -319,7 +331,8 @@ sub _sanitize_fragment {
     my $renew = "";
     while ( my $token = $p->get_token )
     {
-        if ( $HTML::Tagset::isKnown{$token->get_tag} )
+        # warn sprintf("%10s %10s %s\n",  $token->[-1], $token->get_tag, blessed($token));
+        if ( $isKnown->{$token->get_tag} )
         {
             if ( $token->is_start_tag )
             {
@@ -330,7 +343,7 @@ sub _sanitize_fragment {
                     push @pair, join("=", $attr, '"' . encode_entities(decode_entities($token->get_attr($attr))) . '"');
                 }
                 $renew .= "<" . join(" ", $token->get_tag, @pair);
-                $renew .= $token->get_attr("/") || $emptyElement->{$token->get_tag} ? "/>" : ">";
+                $renew .= ( $token->get_attr("/") || $emptyElement->{$token->get_tag} ) ? "/>" : ">";
             }
             else
             {
@@ -394,7 +407,7 @@ XHTML::Util - (alpha software) powerful utilities for common but difficult to na
 
 =head2 VERSION
 
-0.01
+0.02
 
 =head1 SYNOPSIS
 
@@ -414,10 +427,19 @@ XHTML::Util - (alpha software) powerful utilities for common but difficult to na
  # </blockquote>
 
  print $xu->strip_tags('<i><a href="#"><b>Something</b></a>.</i>','a');
+ # <i><b>Something</b>.</i>
 
 =head1 DESCRIPTION
 
 This is a set of itches I'm sick of scratching 5 different ways from the Sabbath. Right now it's in alpha-mode so please sample but don't count on the interface or behavior. Some of the code is fire tested in other places but as this is a new home and API, it's subject to change. Like they say, release early, release often. Like I say: Release whatever you've got so you'll be embarrassed into making it better.
+
+You can use CSS expressions to most of the methods. E.g., to only enpara the contents of div tags with a class of "enpara" -- C<< <div class="enpara"/> >> -- you could do this-
+
+ print $xu->enpara($content, "div.enpara"); 
+
+To do the contents of all blockquotes and divs-
+
+ print $xu->enpara($content, "div, blockquote"); 
 
 =head1 METHODS
 
@@ -446,13 +468,11 @@ What you can do, and I've done successfully for years, is something like this-
  # No need to link back to the page you're viewing already.
  my $single_view_title = $post_title;
 
-=head2 selector_to_xpath
-
-This wraps L<selector_to_xpath HTML::Selector::Xpath/selector_to_xpath>.
-
 =head2 remove
 
-[Not implemented.] Completely removes the matched nodes, including their content. This differs from L</strip_tags> which retains the child nodes and only removes the tag(s) proper.
+Takes a content block and a CSS selector string. Completely removes the matched nodes, including their content. This differs from L</strip_tags> which retains the child nodes intact and only removes the tag(s) proper.
+
+ my $cleaned = $xu->remove($html, "center, img[src^='http']");
 
 =head2 traverse
 
@@ -523,13 +543,22 @@ With C<<XHTML::Util->enpara>> you will get-
 
 Don't use unless you read the code and see why/how.
 
-=head1 TODO
+=head2 selector_to_xpath
 
-Finish spec and tests. Get it running solid enough to remove alpha label.
+This wraps L<selector_to_xpath HTML::Selector::Xpath/selector_to_xpath>. Not really meant to be used but exposed in case you want it.
+
+ print $xu->selector_to_xpath("form[name='register'] input[type='password']");
+ # //form[@name='register']//input[@type='password']
+
+=head1 TO DO
+
+Finish spec and tests. Get it running solid enough to remove alpha label. Generalize the argument handling. Provide optional setting or methods for returning nodes intead of serialized content. Improve document/head related handling/options.
 
 =head1 BUGS AND LIMITATIONS
 
 All input should be utf8 or at least safe to run L<Encode::decode_utf8> on. Regular Latin character sets, I suspect, will be fine but extended sets will probably give garbage or unpredictable results; guessing.
+
+This module is currently targeted to working with body B<fragments>. You will get fragments back, not documents. I want to expand it to handle both and deal with doc, DTD, head and such but it's not it's primary use case so it won't come first.
 
 I have used many of these methods and snippets in many projects and I'm tired of recycling them. Some are extremely useful and, at least in the case of L</enpara>, better than any other implementation I've been able to find in any language.
 
@@ -537,36 +566,25 @@ That said, a lot of the code herein is not well tested or at least not well test
 
 =head1 SEE ALSO
 
-L<Path::Class>.
+L<XML::LibXML>, L<HTML::Tagset>, L<HTML::Entities>, L<HTML::Selector::XPath>, L<HTML::TokeParser::Simple>, L<CSS::Tiny>.
+
+L<CSS W3Schools|http://www.w3schools.com/Css/default.asp>, L<Learning CSS at W3C|http://www.w3.org/Style/CSS/learning>.
+
+=head1 AUTHOR
+
+Ashley Pond V, C<< <ashley at cpan.org> >>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright (E<copy>) 2006-2009 Ashley Pond V.
+Copyright (E<copy>) 2006-2009.
 
 This program is free software; you can redistribute it or modify it or both under the same terms as Perl itself.
 
 =head1 DISCLAIMER OF WARRANTY
 
-Because this software is licensed free of charge, there is no warranty
-for the software, to the extent permitted by applicable law. Except
-when otherwise stated in writing the copyright holders or other
-parties provide the software "as is" without warranty of any kind,
-either expressed or implied, including, but not limited to, the
-implied warranties of merchantability and fitness for a particular
-purpose. The entire risk as to the quality and performance of the
-software is with you. Should the software prove defective, you assume
-the cost of all necessary servicing, repair, or correction.
+Because this software is licensed free of charge, there is no warranty for the software, to the extent permitted by applicable law. Except when otherwise stated in writing the copyright holders or other parties provide the software "as is" without warranty of any kind, either expressed or implied, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose. The entire risk as to the quality and performance of the software is with you. Should the software prove defective, you assume the cost of all necessary servicing, repair, or correction.
 
-In no event unless required by applicable law or agreed to in writing
-will any copyright holder, or any other party who may modify and/or
-redistribute the software as permitted by the above licence, be liable
-to you for damages, including any general, special, incidental, or
-consequential damages arising out of the use or inability to use the
-software (including but not limited to loss of data or data being
-rendered inaccurate or losses sustained by you or third parties or a
-failure of the software to operate with any other software), even if
-such holder or other party has been advised of the possibility of such
-damages.
+In no event unless required by applicable law or agreed to in writing will any copyright holder, or any other party who may modify and/or redistribute the software as permitted by the above licence, be liable to you for damages, including any general, special, incidental, or consequential damages arising out of the use or inability to use the software (including but not limited to loss of data or data being rendered inaccurate or losses sustained by you or third parties or a failure of the software to operate with any other software), even if such holder or other party has been advised of the possibility of such damages.
 
 =cut
 

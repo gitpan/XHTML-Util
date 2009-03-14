@@ -39,9 +39,7 @@ in<br/>
 the fifth.</p>
 <p>Did it here in
 the sixth mashed up against the fifth so we
-could not possibly split on whitespace.</p>
-<p>&lt;hr/&gt;</p>
-
+could not possibly split on whitespace.</p><hr/>
 <p>Have a <b>bold</b> here that needs a paragraph.</p>
 
 <p>also need</p>

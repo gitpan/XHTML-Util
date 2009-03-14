@@ -3,7 +3,7 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.01
+    0.02
 
 SYNOPSIS
      use strict;
@@ -22,6 +22,7 @@ SYNOPSIS
      # </blockquote>
 
      print $xu->strip_tags('<i><a href="#"><b>Something</b></a>.</i>','a');
+     # <i><b>Something</b>.</i>
 
 DESCRIPTION
     This is a set of itches I'm sick of scratching 5 different ways from the
@@ -30,6 +31,16 @@ DESCRIPTION
     places but as this is a new home and API, it's subject to change. Like
     they say, release early, release often. Like I say: Release whatever
     you've got so you'll be embarrassed into making it better.
+
+    You can use CSS expressions to most of the methods. E.g., to only enpara
+    the contents of div tags with a class of "enpara" -- "<div
+    class="enpara"/>" -- you could do this-
+
+     print $xu->enpara($content, "div.enpara");
+
+    To do the contents of all blockquotes and divs-
+
+     print $xu->enpara($content, "div, blockquote");
 
 METHODS
   new
@@ -58,14 +69,12 @@ METHODS
      # No need to link back to the page you're viewing already.
      my $single_view_title = $post_title;
 
-  selector_to_xpath
-    This wraps "selector_to_xpath" in selector_to_xpath
-    HTML::Selector::Xpath.
-
   remove
-    [Not implemented.] Completely removes the matched nodes, including their
-    content. This differs from "strip_tags" which retains the child nodes
-    and only removes the tag(s) proper.
+    Takes a content block and a CSS selector string. Completely removes the
+    matched nodes, including their content. This differs from "strip_tags"
+    which retains the child nodes intact and only removes the tag(s) proper.
+
+     my $cleaned = $xu->remove($html, "center, img[src^='http']");
 
   traverse
     [Not implemented.] Walks the given nodes and executes the given
@@ -138,14 +147,29 @@ METHODS
   xml_parser
     Don't use unless you read the code and see why/how.
 
-TODO
+  selector_to_xpath
+    This wraps "selector_to_xpath" in selector_to_xpath
+    HTML::Selector::Xpath. Not really meant to be used but exposed in case
+    you want it.
+
+     print $xu->selector_to_xpath("form[name='register'] input[type='password']");
+     # //form[@name='register']//input[@type='password']
+
+TO DO
     Finish spec and tests. Get it running solid enough to remove alpha
-    label.
+    label. Generalize the argument handling. Provide optional setting or
+    methods for returning nodes intead of serialized content. Improve
+    document/head related handling/options.
 
 BUGS AND LIMITATIONS
     All input should be utf8 or at least safe to run Encode::decode_utf8 on.
     Regular Latin character sets, I suspect, will be fine but extended sets
     will probably give garbage or unpredictable results; guessing.
+
+    This module is currently targeted to working with body fragments. You
+    will get fragments back, not documents. I want to expand it to handle
+    both and deal with doc, DTD, head and such but it's not it's primary use
+    case so it won't come first.
 
     I have used many of these methods and snippets in many projects and I'm
     tired of recycling them. Some are extremely useful and, at least in the
@@ -157,10 +181,16 @@ BUGS AND LIMITATIONS
     adored.
 
 SEE ALSO
-    Path::Class.
+    XML::LibXML, HTML::Tagset, HTML::Entities, HTML::Selector::XPath,
+    HTML::TokeParser::Simple, CSS::Tiny.
+
+    CSS W3Schools, Learning CSS at W3C.
+
+AUTHOR
+    Ashley Pond V, "<ashley at cpan.org>".
 
 COPYRIGHT & LICENSE
-    Copyright (©) 2006-2009 Ashley Pond V.
+    Copyright (©) 2006-2009.
 
     This program is free software; you can redistribute it or modify it or
     both under the same terms as Perl itself.
