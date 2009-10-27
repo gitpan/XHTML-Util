@@ -11,6 +11,10 @@ inc/Module/Install/Metadata.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
 lib/XHTML/Util.pm
+lib/XHTML/Util.pm.mine
+lib/XHTML/Util.pm.r249
+lib/XHTML/Util.pm.r269
+lib/XHTML/Util.pm.save
 Makefile.PL
 MANIFEST			This list of files
 META.yml
@@ -21,8 +25,6 @@ t/enpara.t
 t/html_to_xhtml.t
 t/inline_stylesheets.t
 t/named-enpara.t
-t/pod-coverage.t
-t/pod.t
 t/remove.t
 t/remove_markup.t
 t/remove_style.t
@@ -32,3 +34,4 @@ t/synopsis.t
 t/translate_tags.t
 t/traverse.t
 t/validate.t
+xt/pod-coverage.t

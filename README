@@ -3,7 +3,7 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.03
+    0.04
 
 SYNOPSIS
      use strict;
@@ -141,9 +141,9 @@ METHODS
      now
      this
      should
-     
  
- not be touched!
+ 
+     not be touched!
      </pre>
      <p>I meant to do that.</p>
 
@@ -187,7 +187,8 @@ SEE ALSO
     XML::LibXML, HTML::Tagset, HTML::Entities, HTML::Selector::XPath,
     HTML::TokeParser::Simple, CSS::Tiny.
 
-    CSS W3Schools, Learning CSS at W3C.
+    CSS W3Schools, <http://www.w3schools.com/Css/default.asp>, Learning CSS
+    at W3C, <http://www.w3.org/Style/CSS/learning>.
 
 AUTHOR
     Ashley Pond V, "<ashley at cpan.org>".

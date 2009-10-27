@@ -33,6 +33,9 @@ my $isBlockLevel = { map {; $_ => 1 }
                      keys %{$isBodyElement}
                  };
 
+<<<<<<< .mine
+
+=======
 sub new {
     my $class = shift;
     my $self = bless {}, $class;
@@ -84,6 +87,7 @@ sub remove { # Synonymous for remove_nodes, all gone.
 
 # No... ? requires object->call shuffling to work : sub enpara_tag { +shift->{enpara_tag} = shift || "p"; }
 
+>>>>>>> .r269
 sub enpara {
     my $self = shift;
     my $content = $self->_sanitize_fragment(shift) or return;
@@ -569,7 +573,7 @@ That said, a lot of the code herein is not well tested or at least not well test
 
 L<XML::LibXML>, L<HTML::Tagset>, L<HTML::Entities>, L<HTML::Selector::XPath>, L<HTML::TokeParser::Simple>, L<CSS::Tiny>.
 
-CSS W3Schools, L<http://www.w3schools.com/Css/default.asp>, Learning CSS at W3C, L<http://www.w3.org/Style/CSS/learning>.
+L<CSS W3Schools|http://www.w3schools.com/Css/default.asp>, L<Learning CSS at W3C|http://www.w3.org/Style/CSS/learning>.
 
 =head1 AUTHOR
 
@@ -624,6 +628,7 @@ delete @Charmap{qw( amp lt gt quot apos )};
 
 #  LocalWords:  xpath
 
+<<<<<<< .mine
 use Test::More tests => 1;
 
 XML::LibXML based only at first because it's easier.
@@ -661,7 +666,7 @@ We WILL NOT be covering other well known and well done implementations like HTML
    $comp = escape_uri_component($str);
 
    $esc = encode_entities($str);
-
+=======
 # Two ways to get doc together. Pass through HTML::TokeParser first to
 # correct for nothing but HTML and escape the rest.
 
@@ -673,4 +678,4 @@ We WILL NOT be covering other well known and well done implementations like HTML
 
 HTML TO XHTML will have to strip depracated shite like center and font.
 
-
+>>>>>>> .r269

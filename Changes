@@ -1,5 +1,10 @@
 Changes file for XHTML::Util
 
+0.04    20091026
+        - Lost track a bit... On the road to a pretty comprehensive UI
+          revamp to act a lot more like jQuery which is an awesome way
+          to handle this stuff and pass it around.
+
 0.03    20090314
         - Embarrassing Pod typo fixed; couple other things tweaked.
 

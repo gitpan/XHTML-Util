@@ -3,19 +3,23 @@ abstract: '(alpha software) powerful utilities for common but difficult to nail 
 author:
   - 'Ashley Pond V, C<< <ashley at cpan.org> >>.'
 build_requires:
+  ExtUtils::MakeMaker: 6.42
   File::Spec: 3
   Test::More: 0.5
+configure_requires:
+  ExtUtils::MakeMaker: 6.42
 distribution_type: module
-generated_by: 'Module::Install version 0.75'
+generated_by: 'Module::Install version 0.91'
 license: perl
 meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.3.html
-  version: 1.3
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
 name: XHTML-Util
 no_index:
   directory:
     - inc
     - t
+    - xt
 requires:
   CSS::Tiny: 0
   Encode: 2
@@ -25,4 +29,6 @@ requires:
   HTML::TokeParser::Simple: 0
   Scalar::Util: 0
   XML::LibXML: 1.6
-version: 0.03
+resources:
+  license: http://dev.perl.org/licenses/
+version: 0.04
