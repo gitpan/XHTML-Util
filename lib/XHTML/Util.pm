@@ -2,24 +2,33 @@ package XHTML::Util;
 use strict;
 use warnings;
 no warnings "uninitialized";
-our $VERSION = "0.04";
-use Encode;
-use Carp; # By verbosity?
-use Scalar::Util "blessed";
-use HTML::Tagset 3.02 ();
-use HTML::Entities;
+use Carp;
 use XML::LibXML;
+use HTML::Tagset 3.02 ();
+use HTML::Entities qw( encode_entities decode_entities );
 use HTML::Selector::XPath ();
+use HTML::DTD;
+use Path::Class;
+use Encode;
+use Scalar::Util qw( blessed );
 use HTML::TokeParser::Simple;
-# LWP::Simple, external styles
-use CSS::Tiny;
+use XML::Normalize::LibXML qw( xml_normalize );
 
-my $isKnown = \%HTML::Tagset::isKnown;
+use overload q{""} => sub { +shift->as_string }, fallback => 1;
+
+our $VERSION = "0.99_01";
+our $AUTHORITY = 'cpan:ASHLEY';
+our $TITLE_ATTR = join("/", __PACKAGE__, $VERSION);
+
+our $FRAGMENT_SELECTOR = "div[title='$TITLE_ATTR']";
+our $FRAGMENT_XPATH = HTML::Selector::XPath::selector_to_xpath($FRAGMENT_SELECTOR);
+
+my $isKnown = { %HTML::Tagset::isKnown }; # We modify this one.
 my $emptyElement = \%HTML::Tagset::emptyElement;
-#my $canTighten = \%HTML::Tagset::canTighten;
-#my $isHeadElement = \%HTML::Tagset::isHeadElement;
 my $isBodyElement = \%HTML::Tagset::isBodyElement;
 my $isPhraseMarkup = \%HTML::Tagset::isPhraseMarkup;
+#my $canTighten = \%HTML::Tagset::canTighten;
+#my $isHeadElement = \%HTML::Tagset::isHeadElement;
 #my $isHeadOrBodyElement = \%HTML::Tagset::isHeadOrBodyElement;
 #my $isList = \%HTML::Tagset::isList;
 #my $isTableElement = \%HTML::Tagset::isTableElement;
@@ -27,98 +36,318 @@ my $isFormElement = \%HTML::Tagset::isFormElement;
 #my $p_closure_barriers = \@HTML::Tagset::p_closure_barriers;
 
 # Accommodate HTML::TokeParser's idea of a "tag."
-for my $t ( keys %{$emptyElement} ) { $isKnown->{"$t/"} = 1 }
+$isKnown->{"$_/"} = 1 for keys %{$emptyElement};
 my $isBlockLevel = { map {; $_ => 1 }
                      grep { ! ( $isPhraseMarkup->{$_} || $isFormElement->{$_} ) }
                      keys %{$isBodyElement}
                  };
+# use YAML; die YAML::Dump($isBlockLevel);
+
+sub tags {
+    grep { ! /\W/ }
+        sort keys %HTML::Tagset::isKnown;
+}
 
 sub new {
     my $class = shift;
+    my $arg = shift or croak "new requires an argument";
     my $self = bless {}, $class;
+
+    if ( ref($arg) eq "SCALAR" )
+    {
+        $self->_parse( $$arg );
+        # $self->_original_string( $$arg );
+    }
+    elsif ( blessed($arg) eq "Path::Class::File" )
+    {
+        $self->_parse( scalar $arg->slurp );
+    }
+    elsif ( blessed($arg) and $arg->can("getlines") )
+    {
+        $self->_parse( join("", $arg->getlines) );
+    }
+    else
+    {
+        $self->_parse( scalar Path::Class::File->new($arg)->slurp );
+    }
     $self;
 }
 
-sub strip_tags {
+sub debug {
     my $self = shift;
-    my $content = shift;
-    my $xpath = HTML::Selector::XPath::selector_to_xpath(shift);
-    carp "No selector was given to strip_tags" and return $content unless $xpath;
-    my $root = blessed($content) =~ /\AXML::LibXML::/ ?
-        $content : $self->_fragment_to_body_node($content);
+    $self->{_debug} = shift if @_;
+    $self->{_debug} || 0;
+}
 
-    my $doc = $root->getOwnerDocument;
-    for my $node ( $root->findnodes($xpath) )
+sub as_string {
+    my $self = shift;
+    my @args = @_ ? @_ : ( 1, "UTF-8" );
+    if ( $self->is_document )
     {
-        my $fragment = $doc->createDocumentFragment;
-        for my $n ( $node->childNodes )
-        {
-            $fragment->appendChild($n);
-        }
-        $node->replaceNode($fragment);
+        return _trim( Encode::decode_utf8( $self->doc->serialize(@args) ) );
     }
-    my $out = "";
-    $out .= $_->serialize(1) for $root->childNodes;
-    _trim($out);
+    elsif ( $self->is_fragment )
+    {
+        croak "No root in document\n", $self->doc->serialize
+            unless $self->root;
+
+        my ( $fragment ) = $self->root->findnodes($FRAGMENT_XPATH);
+
+        croak "No fragment...?\n", $self->doc->serialize
+            unless $fragment;
+
+        my $out = "";
+        $out .= $_->serialize(@args) for $fragment->childNodes;
+
+        return Encode::decode_utf8( _trim($out) );
+    }
+    else
+    {
+        die "No type was found, internal issue :(";
+    }
 }
 
-sub _trim {
-    s/\A\s+|\s+\z//g for @_;
-    wantarray ? @_ : $_[0];
+sub is_document {
+    +shift->{_type} eq "document";
 }
 
-sub remove { # Synonymous for remove_nodes, all gone.
+sub is_fragment {
+    +shift->{_type} eq "fragment";
+}
+
+sub _parse {
     my $self = shift;
-    # my $content = shift;
-    my $content = $self->_sanitize_fragment(shift) or return;
-    my $xpath = HTML::Selector::XPath::selector_to_xpath(shift);
-    carp "No selector was given to strip_tags" and return $content unless $xpath;
-    my $root = blessed($content) =~ /\AXML::LibXML::/ ?
-        $content : $self->_fragment_to_body_node($content);
+    $self->{_sanitized} =
+        $self->_sanitize( $self->{_original_string} = shift );
 
-    $_->parentNode->removeChild($_) for $root->findnodes($xpath);
-    my $out = "";
-    $out .= $_->serialize(1) for $root->childNodes;
-    _trim($out);
+    if ( $self->{_original_string} =~ /\A(?:<\W[^>]+>|\s+)*<html/i )
+    {
+        $self->{_type} = "document";
+        $self->{_doc} = $self->parser->parse_html_string($self->{_sanitized});
+        # Special case, doc contains ONLY 1 p and it's first and last
+        # child of body then we should replace it with the FRAGMENT
+        # holder div.
+    }
+    else
+    {
+        # SHOULD we sanitize first?
+        $self->{_type} = "fragment";
+
+        $self->{_doc} = $self->parser
+            ->parse_html_string(join("\n",
+                                     "<html><head><title></title></head><body>",
+                                     sprintf('<div title="%s">',
+                                             $TITLE_ATTR
+                                     ),
+                                     $self->{_sanitized},
+                                     #Encode::encode_utf8($self->{_sanitized}),
+                                     '</div></body></html>')
+            );
+    }
+
+    $self->root->normalize;
+    $self->doc;
 }
 
-# No... ? requires object->call shuffling to work : sub enpara_tag { +shift->{enpara_tag} = shift || "p"; }
+sub root {
+    +shift->doc->getDocumentElement;
+}
+
+sub doc {
+    +shift->{_doc};
+}
+
+sub parser {
+    my $self = shift;
+    return $self->{_parser} if $self->{_parser};
+    $self->{_parser} = XML::LibXML->new;
+    $self->{_parser}->recover_silently(1);
+    $self->{_parser}->keep_blanks(1);
+    $self->{_parser};
+}
+
+sub is_valid {
+    my $self = shift;
+    return 1 if $self->doc->is_valid;
+    # 321 debug about which DTD is being used.
+    my $dtd_name = shift || "xhtml1-transitional";
+    my $dtd_string = HTML::DTD->get_dtd("$dtd_name.dtd");
+    $self->{_dtd} = XML::LibXML::Dtd->parse_string($dtd_string);
+    return $self->doc->is_valid($self->{_dtd}) ? $self : undef;
+}
+
+sub validate {
+    my $self = shift;
+    return 1 if $self->is_valid;
+    return $self->doc->validate($self->{_dtd});
+}
+
+sub _original_string {
+    my $self = shift;
+    $self->{_original_string} ||= shift;
+#    $self->{_original_string} ||= Encode::encode_utf8( shift ); #321
+    $self->{_original_string};
+}
+
+sub _return {
+    my $self = shift; # 321 ARGS for serialize.
+    xml_normalize( $self->doc );
+    my $callers_wantarray = [ caller(1) ]->[5];
+    return unless defined $callers_wantarray; # Void context.
+    return $self;    # Should always return self?
+
+    if ( $self->is_document )
+    {
+        return $self->as_string;
+    }
+    elsif ( $self->is_fragment )
+    {
+        return $self->as_string;
+        return _trim($self->as_fragment);
+    }
+    else
+    {
+        die "Stupid, stupid, developer...";
+    }
+}
+
+# Returns undef if no action is taken.
+# Returns 1 if action is taken and validation is successful.
+
+sub fix {
+    my $self = shift;
+    return $self->_return if $self->is_valid;
+
+    for my $fixable ( qw( img ) )
+    {
+        my $method = "_fix_$fixable";
+        for my $node ( $self->root->findnodes("//$fixable") )
+        {
+            $self->$method($node);
+        }
+    }
+
+    $self->is_valid()
+        or carp "Could not fix the problems with this document";
+    $self->validate();
+    $self->_return;
+}
+
+sub _sanitize {
+    my $self = shift;
+    my $fragment = shift or return;
+    #$fragment = Encode::decode_utf8($fragment);
+    my $p = HTML::TokeParser::Simple->new(\$fragment);
+    my $renew = "";
+    my $in_body = 0;
+  TOKEN:
+    while ( my $token = $p->get_token )
+    {
+        #warn sprintf("%10s %10s %s\n",  $token->[-1], $token->get_tag, blessed($token));
+        #no warnings "uninitialized";
+        if ( $isKnown->{$token->get_tag} )
+        {
+            if ( $token->is_start_tag )
+            {
+                my @pair;
+                for my $attr ( @{ $token->get_attrseq } )
+                {
+                    next if $attr eq "/";
+                    my $value = encode_entities(decode_entities($token->get_attr($attr)));
+                    push @pair, join("=",
+                                     $attr,
+                                     qq{"$value"});
+                }
+                $renew .= "<" . join(" ", $token->get_tag, @pair);
+                $renew .= ( $token->get_attr("/") || $emptyElement->{$token->get_tag} ) ? "/>" : ">";
+            }
+            else
+            {
+                $renew .= $token->as_is;
+            }
+        }
+        elsif ( $token->is_declaration or $token->is_pi )
+        {
+            $renew .= $token->as_is;
+        }
+        else
+        {
+            $renew .= encode_entities(decode_entities($token->as_is),'<>"&');
+        }
+    }
+    return $renew;
+}
+
+sub body {
+    [ shift->doc->findnodes("//body") ]->[0];
+}
+
+sub head {
+    [ shift->doc->findnodes("//head") ]->[0];
+}
+
+sub as_fragment {
+    my ( $fragment ) = shift->doc->findnodes($FRAGMENT_XPATH);
+    my $out = "";
+    $out .= $_->serialize(1,"UTF-8") for $fragment->childNodes;
+    return $out;
+}
+
+sub _make_selector {
+    my $self = shift;
+    my $selector = shift;
+    unless ( $selector )
+    {
+        my $base = $self->is_fragment ? $FRAGMENT_SELECTOR : "body";
+        $selector = "$base, $base *";
+    }
+    warn "Selector: $selector" if $self->debug > 2;
+    $selector =~ m,\A/, ?
+        $selector :
+        HTML::Selector::XPath::selector_to_xpath($selector);
+}
+
+sub callback {
+    my $self = shift;
+    my $xpath = $self->_make_selector(+shift);
+    my $code = shift;
+    for my $node ( $self->root->findnodes("$xpath") )
+    {
+        $code->($node);
+    }
+    $self->_return;
+}
+
 
 sub enpara {
     my $self = shift;
-    my $content = $self->_sanitize_fragment(shift) or return;
-    my $selector = shift;
+    my $xpath = $self->_make_selector(+shift);
+    my $root = $self->root;
+    my $doc = $self->doc;
 
-    my $root = blessed($content) eq 'XML::LibXML::Element' ?
-        $content : $self->_fragment_to_body_node($content);
-
-    $root->normalize;
-    my $doc = $root->getOwnerDocument;
-
-    if ( my $xpath = HTML::Selector::XPath::selector_to_xpath($selector) )
+  NODE:
+    for my $designated_enpara ( $root->findnodes("$xpath") )
     {
-      NODE:
-        for my $designated_enpara ( $root->findnodes($xpath) )
+        # warn "FOUND ", $designated_enpara->nodeName, $/;
+        # warn "*********", $designated_enpara->toString if $self->debug > 2;
+        next unless $designated_enpara->nodeType == 1;
+        next NODE if $designated_enpara->nodeName eq 'p';
+        if ( $designated_enpara->nodeName eq 'pre' )  # I don't think so, honky.
         {
-            next unless $designated_enpara->nodeType == 1;
-            if ( $designated_enpara->nodeName eq 'pre' )  # I don't think so, honky.
-            {
-                # Expand or leave it alone? or ->validate it...?
-                carp "It makes no sense to enpara within a <pre/>; skipping";
-                next NODE;
-            }
-            next unless $isBlockLevel->{$designated_enpara->nodeName};
-            _enpara_this_nodes_content($designated_enpara, $doc);
+            # Expand or leave it alone? or ->validate it...?
+            carp "It makes no sense to enpara within a <pre/>; skipping";
+            next NODE;
         }
+        next unless $isBlockLevel->{$designated_enpara->nodeName};
+
+        $self->_enpara_this_nodes_content($designated_enpara, $doc);
     }
-    _enpara_this_nodes_content($root, $doc);
-    my $out = "";
-    $out .= $_->serialize(1) for $root->childNodes;
-    _trim($out);
+    $self->_enpara_this_nodes_content($root, $doc);
+    $self->_return;
 }
 
 sub _enpara_this_nodes_content {
-    my ( $parent, $doc ) = @_;
+    my ( $self, $parent, $doc ) = @_;
     my $lastChild = $parent->lastChild;
     my @naked_block;
     for my $node ( $parent->childNodes )
@@ -133,6 +362,7 @@ sub _enpara_this_nodes_content {
             next unless @naked_block; # nothing to enblock
             my $p = $doc->createElement("p");
             $p->setAttribute("enpara","enpara");
+            $p->setAttribute("line",__LINE__) if $self->debug > 4;
             $p->appendChild($_) for @naked_block;
             $parent->insertBefore( $p, $node )
                 if $p->textContent =~ /\S/;
@@ -159,6 +389,7 @@ sub _enpara_this_nodes_content {
                     next unless @naked_block;
                     my $p = $doc->createElement("p");
                     $p->setAttribute("enpara","enpara");
+                    $p->setAttribute("line",__LINE__) if $self->debug > 4;
                     $p->appendChild($_) for @naked_block;
                     @naked_block = ();
                     push @new_node, $p;
@@ -174,7 +405,7 @@ sub _enpara_this_nodes_content {
             }
             $node->unbindNode;
         }
-        else
+        elsif ( $node->nodeName !~ /\Ahead|body\z/ ) # Hack? Fix real reason? 321
         {
             push @naked_block, $node; # if $node->nodeValue =~ /\S/;
         }
@@ -184,6 +415,7 @@ sub _enpara_this_nodes_content {
         {
             my $p = $doc->createElement("p");
             $p->setAttribute("enpara","enpara");
+            $p->setAttribute("line",__LINE__) if $self->debug > 4;
             $p->appendChild($_) for ( @naked_block );
             $parent->appendChild($p) if $p->textContent =~ /\S/;
         }
@@ -227,175 +459,86 @@ sub _enpara_this_nodes_content {
     }
 }
 
-sub traverse { # traverse("/*") -> callback
-    my ( $self, $selector, $callback ) = @_;
-    croak "not implemented";
+sub _trim {
+    s/\A\s+|\s+\z//g for @_;
+    wantarray ? @_ : $_[0];
 }
 
-sub translate_tags {
-    croak "not implemented";
-}
-
-sub remove_style { # (* or [list])
-    # just calls remove with args
-    croak "not implemented";
-}
-
-sub inline_stylesheets { # (names/paths) / external sheets allowed.
-    croak "not implemented";
-    my $self = shift;
-    my $thing = shift;
-# :before and :after stuff is still missing
-# ?? <style type="text/css" title="currentStyle" media="screen">
-# ?? needs to read "@import" and link rel="stylesheet" src=".."
-
-    my $doc = $self->xml_parser->parse_html_string( $thing ) unless ref($thing); 
-    $doc ||= $self->xml_parser->parse_html_file( $thing ) if -e $thing;
-    $doc ||= $self->xml_parser->parse_html_string( join("",$thing->getlines) )
-        if blessed($thing) && $thing->can("getlines");
-
-    my $root = $doc->documentElement();
-
-    my $collected = "";
-    for my $sheet ( $root->findnodes("//style") )
+sub _fix_img {
+    my ( $self, $img ) = @_;
+    unless ( $img->hasAttribute("src") )
     {
-#    print $sheet->textContent, $/;
-        $collected .= $sheet->textContent;
+        croak "There is no way to fix an image without a source";
     }
-
-    my $css = CSS::Tiny->read_string($collected);
-
-    my %xpath_to_style;
-    for my $rule ( reverse sort keys %{$css} ) {
-        my $selector = HTML::Selector::XPath->new($rule);
-        $xpath_to_style{$selector->to_xpath} = $css->{$rule};
-        # Uncomment if you want to see the CSS-->xpath strings
-        # printf("%s\n%s\n%s\n\n",
-        # $rule,
-        # $selector->to_xpath,
-        # format_css($css->{$rule})
-        # );
-    }
-
-    for my $xpath ( keys %xpath_to_style ) {
-        my $style = $xpath_to_style{$xpath};
-        for my $node ( $root->findnodes( $xpath ) ) {
-            if ( my $inline_css = $node->getAttributeNode("style") ) {
-                my $fake_sheet = $node->nodeName .
-                    "{" . $inline_css->getValue . "}";
-                my $css = CSS::Tiny->read_string($fake_sheet);
-                next unless $css;
-                %{$style} = (
-                             %{$style},
-                             %{$css->{$node->nodeName}}
-                             );
-            }
-            $node->setAttribute("style", format_css($style));
-            $node->removeAttribute("class");
-        }
-    }
-    return $doc->toString(1);
-}
-
-sub _format_css {
-    my $css = shift || return '';
-    my @pairs;
-    for my $attr ( keys %{$css} )
+    unless ( $img->hasAttribute("alt") )
     {
-        push @pairs, "$attr:$css->{$attr}";
+        $img->setAttribute("alt", $img->getAttribute("src"));
     }
-    join "; ", @pairs;
 }
 
-sub html_to_xhtml { # Handles docs or fragments.
-    croak "not implemented";
+sub _fix_center {
+    my ( $self, $center ) = @_;
+    # <center> --> <div style="text-align:center">
+    die "Unimplemented";
 }
 
-sub _fragment_to_body_node {
+sub _make_selector_xpath {
     my $self = shift;
-    my $html = \$_[0];
-    my $parser = $self->xml_parser();
-    $parser->recover(1);
-    $parser->recover_silently(1);
-    my ( $body ) = $parser->parse_html_string("<body>".${$html}."</body>")->findnodes("//body");
-    return $body;
+    my $selector = shift;
+    my $base = $self->is_fragment ? $FRAGMENT_SELECTOR : "body";
+    my $xpath = HTML::Selector::XPath::selector_to_xpath("$base $selector");
+    warn "XPATH: $xpath\n" if $self->debug >= 5;
+    return $xpath;
 }
 
-sub _sanitize_fragment {
+sub remove {
     my $self = shift;
-    my $fragment = shift or return;
-#    $self->_fragment_to_xhtml($fragment);
-    $fragment = Encode::decode_utf8($fragment);
-    my $p = HTML::TokeParser::Simple->new(\$fragment);
-    my $renew = "";
-    while ( my $token = $p->get_token )
+    my $xpath = $self->_make_selector_xpath(@_);
+    for my $node ( $self->root->findnodes($xpath) )
     {
-        # warn sprintf("%10s %10s %s\n",  $token->[-1], $token->get_tag, blessed($token));
-        if ( $isKnown->{$token->get_tag} )
+        $node->parentNode->removeChild($node);
+    }
+    $self->_return;
+}
+
+sub strip_tags {
+    my $self = shift;
+    my $xpath = $self->_make_selector_xpath(@_);
+
+    for my $node ( $self->root->findnodes($xpath) )
+    {
+        my $fragment = $self->doc->createDocumentFragment;
+        for my $n ( $node->childNodes )
         {
-            if ( $token->is_start_tag )
-            {
-                my @pair;
-                for my $attr ( @{ $token->get_attrseq } )
-                {
-                    next if $attr eq "/";
-                    push @pair, join("=", $attr, '"' . encode_entities(decode_entities($token->get_attr($attr))) . '"');
-                }
-                $renew .= "<" . join(" ", $token->get_tag, @pair);
-                $renew .= ( $token->get_attr("/") || $emptyElement->{$token->get_tag} ) ? "/>" : ">";
-            }
-            else
-            {
-                $renew .= $token->as_is;
-            }
+            $fragment->appendChild($n);
         }
-        else
-        {
-            $renew .= encode_entities(decode_entities($token->as_is));
-        }
+        $node->replaceNode($fragment);
     }
-    return $renew;
+    $self->_return;
 }
 
-sub _fragment_to_xhtml {
+sub same_same {
     my $self = shift;
-    return unless @_;
-    my $html = \$_[0];
-    my $doc = $self->_fragment_to_doc($html);
-    my ( $body ) = $doc->findnodes("//body");
-    my ( $head ) = $doc->findnodes("//head");
-    my $out = "";
-    my $target = $body || $head;
-    $target or return $out;
-    for my $kid ( $target->childNodes ) {
-        $kid->removeChild($_) for
-            grep { $_->nodeType == 3 and $_->data !~ /\w/ } $kid->childNodes;
-        $out .= $kid->serialize(1);
-    }
-    return $out if defined wantarray;
-    ${$html} = $out;
+    my $other = shift;
+    my $self2 = blessed($other) eq __PACKAGE__ ?
+        $other : __PACKAGE__->new($other);
+
+    $self->parser->keep_blanks(0);
+
+    my $one = $self->parser->parse_string($self->root->serialize(0))->serialize(0);
+    my $two = $self->parser->parse_string($self2->root->serialize(0))->serialize(0);
+
+    $self->parser->keep_blanks(1);
+
+    $one eq $two or die "$one\n\n$two"
 }
 
-sub validate { # Against DTDs!
-    croak "not implemented";
-}
-
-sub xml_parser {
+sub traverse {
     my $self = shift;
-    $self->{xml_parser} = shift if @_;
-    $self->{xml_parser} ||= XML::LibXML->new();
+    my $other = shift;
+
+    $self->_return;
 }
-
-sub selector_to_xpath {
-    HTML::Selector::XPath::selector_to_xpath($_[1]);
-}
-
-#sub html_parser {
-#    my $self = shift;
-#    $self->{html_parser} = shift if @_;
-#    $self->{html_parser} ||= HTML::TokeParser->new();
-#}
-
 1;
 
 __END__
@@ -406,39 +549,57 @@ XHTML::Util - (alpha software) powerful utilities for common but difficult to na
 
 =head2 VERSION
 
-0.04
+0.99_01
 
 =head1 SYNOPSIS
 
  use strict;
  use warnings;
  use XHTML::Util;
- my $xu = XHTML::Util->new;
- print $xu->enpara("This is naked\n\ntext for making into paragraphs.");
-
+ my $xu = XHTML::Util
+    ->new(\"This is naked\n\ntext for making into paragraphs.");
+ print $xu->enpara, $/;
+ 
  # <p>This is naked</p>
  #
  # <p>text for making into paragraphs.</p>
 
- print $xu->enpara("<blockquote>Quotes should probably have paras.</blockquote>", "blockquote");
+ $xu = XHTML::Util
+     ->new(\"<blockquote>Quotes should probably have paras.</blockquote>");
+ print $xu->enpara("blockquote");
+ 
  # <blockquote>
- # <p>Quotes should probably have paras.</p>
+ #   <p>Quotes should probably have paras.</p>
  # </blockquote>
 
- print $xu->strip_tags('<i><a href="#"><b>Something</b></a>.</i>','a');
+ $xu = XHTML::Util
+     ->new(\'<i><a href="#"><b>Something</b></a>.</i>');
+ 
+ print $xu->strip_tags('a');
  # <i><b>Something</b>.</i>
 
 =head1 DESCRIPTION
 
-This is a set of itches I'm sick of scratching 5 different ways from the Sabbath. Right now it's in alpha-mode so please sample but don't count on the interface or behavior. Some of the code is fire tested in other places but as this is a new home and API, it's subject to change. Like they say, release early, release often. Like I say: Release whatever you've got so you'll be embarrassed into making it better.
-
 You can use CSS expressions to most of the methods. E.g., to only enpara the contents of div tags with a class of "enpara" -- C<< <div class="enpara"/> >> -- you could do this-
 
- print $xu->enpara($content, "div.enpara"); 
+ print $xu->enpara("div.enpara");
 
 To do the contents of all blockquotes and divs-
 
- print $xu->enpara($content, "div, blockquote"); 
+ print $xu->enpara("div, blockquote");
+
+Alterations to the XHTML in the object are persistent.
+
+ my $xu = XHTML::Util
+     ->new(\'<script>alert("OH HAI")</script>');
+ $xu->strip_tags('script');
+
+Will remove the script tagsE<mdash>not the script cotent thoughE<mdash>so the next time you call anything that returns the stringified object the changes will remainE<ndash>
+
+ print $xu->as_string, $/;
+ # alert("OH HAI")
+
+Well... really you'll get C<< <![CDATA[alert(&quot;OH HAI&quot;)]]> >>.
 
 =head1 METHODS
 
@@ -456,9 +617,9 @@ Why you might need this-
 
  <a href="/oh-noes">I <3 <a href="http://icanhascheezburger.com/">kittehs</a></a>
 
-That ain't legal so there's no definition for what browsers should do with it. Some sort of tolerate it, some don't. It's never going to be a good user experience.
+That isn't legal so there's no definition for what browsers should do with it. Some sort of tolerate it, some don't. It's never going to be a good user experience.
 
-What you can do, and I've done successfully for years, is something like this-
+What you can do is something like thisE<ndash>
 
  my $post_title = "I <3 <a href="http://icanhascheezburger.com/">kittehs</a>";
  my $safe_title = $xu->strip_tags($post_title, ["a"]);
@@ -469,9 +630,10 @@ What you can do, and I've done successfully for years, is something like this-
 
 =head2 remove
 
-Takes a content block and a CSS selector string. Completely removes the matched nodes, including their content. This differs from L</strip_tags> which retains the child nodes intact and only removes the tag(s) proper.
+Takes a CSS selector string. Completely removes the matched nodes, including their content. This differs from L</strip_tags> which retains the child nodes intact and only removes the tags proper.
 
- my $cleaned = $xu->remove($html, "center, img[src^='http']");
+ # Remove <center/> tags and external images.
+ my $cleaned = $xu->remove("center, img[src^='http']");
 
 =head2 traverse
 
@@ -485,19 +647,29 @@ Takes a content block and a CSS selector string. Completely removes the matched 
 
 [Not implemented.] Removes styles from matched nodes. To remove all style from a fragment-
 
- $xu->remove_style($content, "*");
+ $xu->remove_style("*");
+
+(Should also remove style sheets, yes?)
 
 =head2 inline_stylesheets
 
 [Not implemented.] Moves all linked stylesheet information into inline style attributes. This is useful, for example, when distributing a document fragment like an RSS/Atom feed and having it match its online appearance.
 
-=head2 html_to_xhtml
+=head2 sanitize
 
 [Not implemented.] Upgrades old or broken HTML to valid XHTML.
 
+=head2 fix
+
+[Partially implemented.] Attempts to make many known problems go away. E.g., entitiy escaping, missing alt attributes of images, etc.
+
 =head2 validate
 
-[Not implemented.] Validates a given document or fragment against its claimed DTD or one provided by name.
+Validates a given document or fragment (which is actually contained in a full document) against a DTD provided by name or, if none is provided, it will validate against F<xhtml1-transitional>. Uses L<XML::LibXML>'s validate under the covers.
+
+=head2 is_valid
+
+A non-fatal version of L</validate>. Returns true on success, false on failure.
 
 =head2 enpara
 
@@ -540,9 +712,17 @@ With C<< XHTML::Util->enpara >> you will get-
  </pre>
  <p>I meant to do that.</p>
 
-=head2 xml_parser
+=head2 parser
 
-Don't use unless you read the code and see why/how.
+The L<XML::LibXML> parser object used to parse (X)HTML.
+
+=head2 doc
+
+The L<XML::LibXML::Document> object created from input.
+
+=head2 root
+
+The documentElement of the L<XML::LibXML::Document> object.
 
 =head2 selector_to_xpath
 
@@ -553,13 +733,17 @@ This wraps L<selector_to_xpath HTML::Selector::Xpath/selector_to_xpath>. Not rea
 
 =head1 TO DO
 
+I think the default doc should be \"". There is no reason to jump through that hoop if wanting to build up something from scratch.
+
 Finish spec and tests. Get it running solid enough to remove alpha label. Generalize the argument handling. Provide optional setting or methods for returning nodes intead of serialized content. Improve document/head related handling/options.
+
+I can see this being easier to use functionally. I haven't decided on the argspec or method--E<gt>sub approach for that yet. I think it's a good idea.
 
 =head1 BUGS AND LIMITATIONS
 
-All input should be utf8 or at least safe to run L<Encode::decode_utf8> on. Regular Latin character sets, I suspect, will be fine but extended sets will probably give garbage or unpredictable results; guessing.
+All input should be UTF-8 or at least safe to run L<Encode::decode_utf8> on. Regular Latin character sets, I suspect, will be fine but extended sets will probably give garbage or unpredictable results; guessing.
 
-This module is currently targeted to working with body B<fragments>. You will get fragments back, not documents. I want to expand it to handle both and deal with doc, DTD, head and such but that's not its primary use case so it won't come first.
+This will wreck XML and probably XHTML with a custom DTD too. It uses L<HTML::Tagset>'s conception of what valid tags are. This is not optimal but it is easier than DTD handlig. It might improve to more automatic detection in the future.
 
 I have used many of these methods and snippets in many projects and I'm tired of recycling them. Some are extremely useful and, at least in the case of L</enpara>, better than any other implementation I've been able to find in any language.
 
@@ -569,7 +753,7 @@ That said, a lot of the code herein is not well tested or at least not well test
 
 L<XML::LibXML>, L<HTML::Tagset>, L<HTML::Entities>, L<HTML::Selector::XPath>, L<HTML::TokeParser::Simple>, L<CSS::Tiny>.
 
-CSS W3Schools, L<http://www.w3schools.com/Css/default.asp>, Learning CSS at W3C, L<http://www.w3.org/Style/CSS/learning>.
+L<CSS W3Schools|http://www.w3schools.com/Css/default.asp>, L<Learning CSS at W3C|http://www.w3.org/Style/CSS/learning>.
 
 =head1 AUTHOR
 
@@ -616,25 +800,11 @@ typedef enum {
 } xmlElementType;
 
 
-RECIPE HOW TO APPLY .ENPARA
-
 use HTML::Entities;
 our %Charmap = %HTML::Entities::entity2char;
 delete @Charmap{qw( amp lt gt quot apos )};
 
-#  LocalWords:  xpath
 
-use Test::More tests => 1;
-
-XML::LibXML based only at first because it's easier.
-
-actual markup
-remove_markup("leaving content")
-
-entire Nodes
-remove_tags("
-
-enpara
 
 translate_tags
 
@@ -646,7 +816,6 @@ strip_attributes()
 inline_stylesheets(names/paths)
 
 fragment_to_xhtml
-
 
 We WILL NOT be covering other well known and well done implementations like HTML::Entities or URI::Escape
 
@@ -674,3 +843,20 @@ We WILL NOT be covering other well known and well done implementations like HTML
 HTML TO XHTML will have to strip depracated shite like center and font.
 
 
+12212g
+
+VALID_ONLY FLAG?
+
+DEBUG:
+
+   5 EVERYTHING
+   4
+   3
+   2
+   1
+
+SANITIZE IS BREAKING THE XML DTD HEADERS AND CDATA
+
+Mention HTML::Restrict
+
+    Test::Harness

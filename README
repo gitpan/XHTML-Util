@@ -3,44 +3,59 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.04
+    0.99_01
 
 SYNOPSIS
      use strict;
      use warnings;
      use XHTML::Util;
-     my $xu = XHTML::Util->new;
-     print $xu->enpara("This is naked\n\ntext for making into paragraphs.");
-
+     my $xu = XHTML::Util
+        ->new(\"This is naked\n\ntext for making into paragraphs.");
+     print $xu->enpara, $/;
+ 
      # <p>This is naked</p>
      #
      # <p>text for making into paragraphs.</p>
 
-     print $xu->enpara("<blockquote>Quotes should probably have paras.</blockquote>", "blockquote");
+     $xu = XHTML::Util
+         ->new(\"<blockquote>Quotes should probably have paras.</blockquote>");
+     print $xu->enpara("blockquote");
+ 
      # <blockquote>
-     # <p>Quotes should probably have paras.</p>
+     #   <p>Quotes should probably have paras.</p>
      # </blockquote>
 
-     print $xu->strip_tags('<i><a href="#"><b>Something</b></a>.</i>','a');
+     $xu = XHTML::Util
+         ->new(\'<i><a href="#"><b>Something</b></a>.</i>');
+ 
+     print $xu->strip_tags('a');
      # <i><b>Something</b>.</i>
 
 DESCRIPTION
-    This is a set of itches I'm sick of scratching 5 different ways from the
-    Sabbath. Right now it's in alpha-mode so please sample but don't count
-    on the interface or behavior. Some of the code is fire tested in other
-    places but as this is a new home and API, it's subject to change. Like
-    they say, release early, release often. Like I say: Release whatever
-    you've got so you'll be embarrassed into making it better.
-
     You can use CSS expressions to most of the methods. E.g., to only enpara
     the contents of div tags with a class of "enpara" -- "<div
     class="enpara"/>" -- you could do this-
 
-     print $xu->enpara($content, "div.enpara");
+     print $xu->enpara("div.enpara");
 
     To do the contents of all blockquotes and divs-
 
-     print $xu->enpara($content, "div, blockquote");
+     print $xu->enpara("div, blockquote");
+
+    Alterations to the XHTML in the object are persistent.
+
+     my $xu = XHTML::Util
+         ->new(\'<script>alert("OH HAI")</script>');
+     $xu->strip_tags('script');
+
+    Will remove the script tags—not the script cotent though—so the next
+    time you call anything that returns the stringified object the changes
+    will remain–
+
+     print $xu->as_string, $/;
+     # alert("OH HAI")
+
+    Well... really you'll get "<![CDATA[alert(&quot;OH HAI&quot;)]]>".
 
 METHODS
   new
@@ -55,12 +70,11 @@ METHODS
 
      <a href="/oh-noes">I <3 <a href="http://icanhascheezburger.com/">kittehs</a></a>
 
-    That ain't legal so there's no definition for what browsers should do
+    That isn't legal so there's no definition for what browsers should do
     with it. Some sort of tolerate it, some don't. It's never going to be a
     good user experience.
 
-    What you can do, and I've done successfully for years, is something like
-    this-
+    What you can do is something like this–
 
      my $post_title = "I <3 <a href="http://icanhascheezburger.com/">kittehs</a>";
      my $safe_title = $xu->strip_tags($post_title, ["a"]);
@@ -70,11 +84,12 @@ METHODS
      my $single_view_title = $post_title;
 
   remove
-    Takes a content block and a CSS selector string. Completely removes the
-    matched nodes, including their content. This differs from "strip_tags"
-    which retains the child nodes intact and only removes the tag(s) proper.
+    Takes a CSS selector string. Completely removes the matched nodes,
+    including their content. This differs from "strip_tags" which retains
+    the child nodes intact and only removes the tags proper.
 
-     my $cleaned = $xu->remove($html, "center, img[src^='http']");
+     # Remove <center/> tags and external images.
+     my $cleaned = $xu->remove("center, img[src^='http']");
 
   traverse
     [Not implemented.] Walks the given nodes and executes the given
@@ -87,7 +102,9 @@ METHODS
     [Not implemented.] Removes styles from matched nodes. To remove all
     style from a fragment-
 
-     $xu->remove_style($content, "*");
+     $xu->remove_style("*");
+
+    (Should also remove style sheets, yes?)
 
   inline_stylesheets
     [Not implemented.] Moves all linked stylesheet information into inline
@@ -95,12 +112,22 @@ METHODS
     document fragment like an RSS/Atom feed and having it match its online
     appearance.
 
-  html_to_xhtml
+  sanitize
     [Not implemented.] Upgrades old or broken HTML to valid XHTML.
 
+  fix
+    [Partially implemented.] Attempts to make many known problems go away.
+    E.g., entitiy escaping, missing alt attributes of images, etc.
+
   validate
-    [Not implemented.] Validates a given document or fragment against its
-    claimed DTD or one provided by name.
+    Validates a given document or fragment (which is actually contained in a
+    full document) against a DTD provided by name or, if none is provided,
+    it will validate against xhtml1-transitional. Uses XML::LibXML's
+    validate under the covers.
+
+  is_valid
+    A non-fatal version of "validate". Returns true on success, false on
+    failure.
 
   enpara
     To add paragraph markup to naked text. There are many, many
@@ -147,8 +174,14 @@ METHODS
      </pre>
      <p>I meant to do that.</p>
 
-  xml_parser
-    Don't use unless you read the code and see why/how.
+  parser
+    The XML::LibXML parser object used to parse (X)HTML.
+
+  doc
+    The XML::LibXML::Document object created from input.
+
+  root
+    The documentElement of the XML::LibXML::Document object.
 
   selector_to_xpath
     This wraps "selector_to_xpath" in selector_to_xpath
@@ -159,20 +192,27 @@ METHODS
      # //form[@name='register']//input[@type='password']
 
 TO DO
+    I think the default doc should be \"". There is no reason to jump
+    through that hoop if wanting to build up something from scratch.
+
     Finish spec and tests. Get it running solid enough to remove alpha
     label. Generalize the argument handling. Provide optional setting or
     methods for returning nodes intead of serialized content. Improve
     document/head related handling/options.
 
-BUGS AND LIMITATIONS
-    All input should be utf8 or at least safe to run Encode::decode_utf8 on.
-    Regular Latin character sets, I suspect, will be fine but extended sets
-    will probably give garbage or unpredictable results; guessing.
+    I can see this being easier to use functionally. I haven't decided on
+    the argspec or method-->sub approach for that yet. I think it's a good
+    idea.
 
-    This module is currently targeted to working with body fragments. You
-    will get fragments back, not documents. I want to expand it to handle
-    both and deal with doc, DTD, head and such but that's not its primary
-    use case so it won't come first.
+BUGS AND LIMITATIONS
+    All input should be UTF-8 or at least safe to run Encode::decode_utf8
+    on. Regular Latin character sets, I suspect, will be fine but extended
+    sets will probably give garbage or unpredictable results; guessing.
+
+    This will wreck XML and probably XHTML with a custom DTD too. It uses
+    HTML::Tagset's conception of what valid tags are. This is not optimal
+    but it is easier than DTD handlig. It might improve to more automatic
+    detection in the future.
 
     I have used many of these methods and snippets in many projects and I'm
     tired of recycling them. Some are extremely useful and, at least in the
@@ -187,8 +227,7 @@ SEE ALSO
     XML::LibXML, HTML::Tagset, HTML::Entities, HTML::Selector::XPath,
     HTML::TokeParser::Simple, CSS::Tiny.
 
-    CSS W3Schools, <http://www.w3schools.com/Css/default.asp>, Learning CSS
-    at W3C, <http://www.w3.org/Style/CSS/learning>.
+    <CSS W3Schools>, <Learning CSS at W3C>.
 
 AUTHOR
     Ashley Pond V, "<ashley at cpan.org>".

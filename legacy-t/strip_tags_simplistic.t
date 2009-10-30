@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 use strict;
 use warnings;
 use Test::More tests => 8;
@@ -35,7 +35,7 @@ ok( $strip = $xu->strip_tags($src, "a"),
     "strip_tags(...'a')"
     );
 
-is( $strip, _fixed(),
+is( HTML::Entities::decode_entities($strip), _fixed(),
     "strip_tags() took <a/> out correctly"
     );
 

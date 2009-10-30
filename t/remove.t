@@ -1,96 +1,46 @@
-#!/usr/bin/perl
 use strict;
 use warnings;
 use Test::More "no_plan";
 use Test::Exception;
-use File::Spec;
 use FindBin;
-use lib File::Spec->catfile($FindBin::Bin, 'lib');
+use File::Spec;
+use lib File::Spec->catfile($FindBin::Bin, '../lib');
 use XHTML::Util;
-use Encode;
 
-ok( my $xu = XHTML::Util->new,
-    "XHTML::Util->new " );
+{
+    my $before = <<"BEFORE";
+<p><a href="/some/uri">Paragraph one</a>.</p>
 
-my $src = join "", <DATA>;
+<blockquote><p>Paragraph <i><b>two</b>...</i></p></blockquote>
+BEFORE
 
-ok( my $remove = $xu->remove($src, 'em,p.remove,center'),
-    "Remove 'em,p.remove,center' from the test text"
-    );
+    ok( my $xu = XHTML::Util->new(\$before),
+        "XHTML::Util->new(...)" );
 
-cmp_ok( $src, "ne", $remove,
-        "Edited and original differ" );
+    like( $xu->as_string, qr/<a[^.]+Paragraph one<\/a>./,
+          '<a/> is in object');
 
-# $remove =~ tr/ /+/;
-# exit;
+    ok( $xu->remove("p a"), "Remove <a/>s inside <p/>s" );
 
-is($remove, Encode::decode_utf8(_fixed()),
-   "enpara doing swimmingly");
+    unlike( $xu->as_string, qr/<a[^.]+Paragraph one<\/a>/,
+          '<a/> and its content are gone');
 
-sub _fixed {
-    q{<p>Did it manually here.</p>
+    like( $xu->as_string, qr/<p>\.<\/p>/,
+          '"Empty" <p/> remains');
 
-<p>Did it manually again in the third.</p><pre>
+    ok( $xu->remove("b"), "Remove <b/>s" );
+    like( $xu->as_string, qr/<i>\.\.\.<\/i>/,
+          '<b/> and its content are gone');
 
+    ok( $xu->remove("i"), "Remove <i/>s" );
+    like( $xu->as_string, qr/<p>Paragraph <\/p>/,
+          '<i/> and its content are gone');
 
+    ok( $xu->remove("p"), "Remove <p/>s" );
 
-“triple spacing in it and an &amp;”
-</pre>
-<p>Didn't do it here<br/>
-in<br/>
-the fifth.</p>
-
-
-<p>Have a <b>bold</b> here that needs a paragraph.</p>
-
-
-
-<p>three in a row</p>
-
-<p>and four for  matter</p>
-
-<p>And two in a row <a href="http://localhost/a/12" title="Read&#10;more of " so="So" i="I" kinda="kinda" have="have" a="a" crush="">[read more]</a></p>
-
-<p>
-  <b>asd</b> 
-</p>
-
-<p>!</p>
-
-<p>?</p>};
-
+#    diag([ $xu->doc->findnodes("//blockquote") ]->[0]->toStringHTML );
+    is( $xu->as_string, '<blockquote/>',
+        'Just the empty <blockquote/> left');
 }
 
-__DATA__
-<p>Did it manually here.</p>
-<p class="remove"><b>Didn't</b> <i>do it.</i></p>
-<p>Did it manually again in the third.</p><pre>
-<em>This is the fourth block and has</em>
-
-
-“triple spacing in it and an &amp;”
-</pre>
-<p>Didn't do it here<br/>
-in<br/>
-the fifth.</p>
-<p class="remove">Did it here in
-the sixth mashed up against the fifth so we
-could not possibly split on whitespace.</p>
-
-<p>Have a <b>bold</b> here that needs a paragraph.</p>
-
-<center>also need</center>
-
-<p>three in a row</p>
-
-<p>and four for <em>that</em> matter</p>
-<p class="remove">real para back into the mix</p>
-<p>And two in a row <a href="http://localhost/a/12" title="Read&#10;more of " so="So" i="I" kinda="kinda" have="have" a="a" crush="">[read more]</a></p>
-
-<p>
-  <b>asd<em>f</em></b> <em>oh noes</em>
-</p>
-
-<p>!</p>
-
-<p>?</p>
+__END__

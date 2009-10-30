@@ -23,12 +23,16 @@ no_index:
 requires:
   CSS::Tiny: 0
   Encode: 2
+  HTML::DTD: 0.03
   HTML::Entities: 0
   HTML::Selector::XPath: 0
   HTML::Tagset: 3.02
   HTML::TokeParser::Simple: 0
   Scalar::Util: 0
+  XHTML::Util: 0
   XML::LibXML: 1.6
+  XML::Normalize::LibXML: 0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.04
+  repository: git://github.com/pangyre/p5-xhtml-util
+version: 0.99_01

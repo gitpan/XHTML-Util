@@ -8,8 +8,13 @@ use FindBin;
 use lib File::Spec->catfile($FindBin::Bin, 'lib');
 use XHTML::Util;
 
-ok( my $xu = XHTML::Util->new,
-    "XHTML::Util->new " );
+my $basic_html = "$FindBin::Bin/files/basic.html";
+ok( my $xu = XHTML::Util->new($basic_html),
+    "XHTML::Util->new(basic.html)" );
 
-dies_ok( sub { $xu->validate('whatever') },
-         "Not implemented" );
+ok( $xu->is_valid(),
+    "$basic_html is_valid" );
+
+lives_ok( sub { $xu->validate() },
+          "$basic_html validates" );
+
