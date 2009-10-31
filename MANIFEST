@@ -21,7 +21,6 @@ legacy-t/sanitize-fragment.t
 legacy-t/strip_tags_simplistic.t
 legacy-t/translate_tags.t
 lib/XHTML/Util.pm
-lib/XHTML/Util.pm.newish
 Makefile.PL
 MANIFEST			This list of files
 META.yml
