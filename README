@@ -3,7 +3,7 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.99_01
+    0.99_02
 
 SYNOPSIS
      use strict;
@@ -230,7 +230,7 @@ SEE ALSO
     <CSS W3Schools>, <Learning CSS at W3C>.
 
 AUTHOR
-    Ashley Pond V, "<ashley at cpan.org>".
+    Ashley Pond V, ashley at cpan.org.
 
 COPYRIGHT & LICENSE
     Copyright (©) 2006-2009.
