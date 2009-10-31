@@ -3,7 +3,7 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.99_02
+    0.99_03
 
 SYNOPSIS
      use strict;
@@ -48,7 +48,7 @@ DESCRIPTION
          ->new(\'<script>alert("OH HAI")</script>');
      $xu->strip_tags('script');
 
-    Will remove the script tags—not the script cotent though—so the next
+    Will remove the script tags—not the script content though—so the next
     time you call anything that returns the stringified object the changes
     will remain–
 
@@ -117,7 +117,7 @@ METHODS
 
   fix
     [Partially implemented.] Attempts to make many known problems go away.
-    E.g., entitiy escaping, missing alt attributes of images, etc.
+    E.g., entity escaping, missing alt attributes of images, etc.
 
   validate
     Validates a given document or fragment (which is actually contained in a
@@ -183,6 +183,44 @@ METHODS
   root
     The documentElement of the XML::LibXML::Document object.
 
+  head
+    The head element.
+
+  body
+    The body element.
+
+    Note there is always an implicit head and body even with fragments
+    because libxml creates them, well, we ask it to do so.
+
+  as_fragment
+    Returns the original (intent-wise) fragment or the elements within the
+    body if starting with a full document.
+
+  as_string
+    Stringified version of object. If the object was created from an HTML
+    fragment, a fragment will be returned.
+
+  debug
+    Yep. 1-5 with higher giving more info to STDERR.
+
+  is_document
+    Returns true if the originally parsed item was a full HTML document.
+
+  is_fragment
+    Returns true if the originally parsed item was a fragment.
+
+  same_same
+    Takes another XHTML::Util object or the valid argument to create one.
+    Attempts to determine if the resulting object is the same as the calling
+    object. E.g.,
+
+     print $xu->same_same(\"<p>OH HAI</p>") ?
+         "Yepper!\n" : "Noes...\n";
+
+  tags
+    Returns a list of all known HTML tags. Please ignore method. I'm not
+    sure it's a good idea, well named, or will remain.
+
   selector_to_xpath
     This wraps "selector_to_xpath" in selector_to_xpath
     HTML::Selector::Xpath. Not really meant to be used but exposed in case
@@ -197,7 +235,7 @@ TO DO
 
     Finish spec and tests. Get it running solid enough to remove alpha
     label. Generalize the argument handling. Provide optional setting or
-    methods for returning nodes intead of serialized content. Improve
+    methods for returning nodes instead of serialized content. Improve
     document/head related handling/options.
 
     I can see this being easier to use functionally. I haven't decided on
@@ -205,13 +243,13 @@ TO DO
     idea.
 
 BUGS AND LIMITATIONS
-    All input should be UTF-8 or at least safe to run Encode::decode_utf8
-    on. Regular Latin character sets, I suspect, will be fine but extended
-    sets will probably give garbage or unpredictable results; guessing.
+    All input should be UTF-8 or at least safe to run decode_utf8 on.
+    Regular Latin character sets, I suspect, will be fine but extended sets
+    will probably give garbage or unpredictable results; guessing.
 
     This will wreck XML and probably XHTML with a custom DTD too. It uses
     HTML::Tagset's conception of what valid tags are. This is not optimal
-    but it is easier than DTD handlig. It might improve to more automatic
+    but it is easier than DTD handling. It might improve to more automatic
     detection in the future.
 
     I have used many of these methods and snippets in many projects and I'm
@@ -227,7 +265,8 @@ SEE ALSO
     XML::LibXML, HTML::Tagset, HTML::Entities, HTML::Selector::XPath,
     HTML::TokeParser::Simple, CSS::Tiny.
 
-    <CSS W3Schools>, <Learning CSS at W3C>.
+    CSS W3Schools, <http://www.w3schools.com/Css/default.asp>, Learning CSS
+    at W3C, <http://www.w3.org/Style/CSS/learning>.
 
 AUTHOR
     Ashley Pond V, ashley at cpan.org.

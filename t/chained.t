@@ -25,7 +25,7 @@ use autodie;
 
     ok( $xu
         ->fix
-        ->callback("//*/text()", sub {
+        ->traverse("//*/text()", sub {
                        my $node = shift;
                        my $text = $node->data;
                        $text =~ s/([^\S\n]*\n[^\S\n]*)+/\n/g;

@@ -51,3 +51,4 @@ t/translate-tags.t
 t/traverse.t
 t/validate.t
 xt/pod-coverage.t
+xt/pod.t
