@@ -21,6 +21,7 @@ legacy-t/sanitize-fragment.t
 legacy-t/strip_tags_simplistic.t
 legacy-t/translate_tags.t
 lib/XHTML/Util.pm
+lib/XHTML/Util/Cookbook.pod
 Makefile.PL
 MANIFEST			This list of files
 META.yml
@@ -51,3 +52,4 @@ t/traverse.t
 t/validate.t
 xt/pod-coverage.t
 xt/pod.t
+xt/remote.t

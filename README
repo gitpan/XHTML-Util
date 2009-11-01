@@ -3,7 +3,7 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.99_04
+    0.99_05
 
 SYNOPSIS
      use strict;
@@ -190,6 +190,9 @@ METHODS
   root
     The documentElement of the XML::LibXML::Document object.
 
+  text
+    The "textContent" of the root node.
+
   head
     The head element.
 
@@ -216,6 +219,7 @@ METHODS
   is_fragment
     Returns true if the originally parsed item was a fragment.
 
+  clone
   same_same
     Takes another XHTML::Util object or the valid argument to create one.
     Attempts to determine if the resulting object is the same as the calling
@@ -274,6 +278,9 @@ SEE ALSO
 
     CSS W3Schools, <http://www.w3schools.com/Css/default.asp>, Learning CSS
     at W3C, <http://www.w3.org/Style/CSS/learning>.
+
+REPOSITORY
+    git://github.com/pangyre/p5-xhtml-util
 
 AUTHOR
     Ashley Pond V, ashley at cpan.org.
