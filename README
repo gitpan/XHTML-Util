@@ -3,7 +3,7 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.99_05
+    0.99_06
 
 SYNOPSIS
      use strict;
@@ -33,8 +33,8 @@ SYNOPSIS
 
 DESCRIPTION
     You can use CSS expressions to most of the methods. E.g., to only enpara
-    the contents of div tags with a class of "enpara" -- "<div
-    class="enpara"/>" -- you could do this-
+    the contents of div tags with a class of "enpara" -- "E<lt>div
+    class="enpara"/E<gt>" -- you could do this-
 
      print $xu->enpara("div.enpara");
 
@@ -55,7 +55,8 @@ DESCRIPTION
      print $xu->as_string, $/;
      # alert("OH HAI")
 
-    Well... really you'll get "<![CDATA[alert(&quot;OH HAI&quot;)]]>".
+    Well... really you'll get "E<lt>![CDATA[alert(&quot;OH
+    HAI&quot;)]]E<gt>".
 
 METHODS
   new
@@ -161,7 +162,7 @@ METHODS
      not be touched!
      </pre>I meant to do that.
 
-    With "XHTML::Util->enpara" you will get-
+    With "XHTML::Util-E<gt>enpara" you will get-
 
      <p>Is this a paragraph<br/>
      or two?</p>

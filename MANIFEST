@@ -28,6 +28,8 @@ META.yml
 README
 t/basics.t
 t/chained.t
+t/cookbook/strip-external-links.t
+t/cookbook/wrap-pre.t
 t/enpara-basic.t
 t/enpara-complex.t
 t/files/basic.html
