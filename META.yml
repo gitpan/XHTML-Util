@@ -22,6 +22,7 @@ no_index:
     - t
     - xt
 requires:
+  Algorithm::Diff: 0
   CSS::Tiny: 0
   Encode: 2
   HTML::DTD: 0.03
@@ -33,7 +34,8 @@ requires:
   Scalar::Util: 0
   XML::LibXML: 1.69
   XML::Normalize::LibXML: 0
+  YAML: 0
 resources:
   license: http://dev.perl.org/licenses/
   repository: git://github.com/pangyre/p5-xhtml-util
-version: 0.99_06
+version: 0.99_07

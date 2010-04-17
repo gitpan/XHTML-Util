@@ -3,7 +3,7 @@ NAME
     difficult to nail HTML munging.
 
   VERSION
-    0.99_06
+    0.99_07
 
 SYNOPSIS
      use strict;
